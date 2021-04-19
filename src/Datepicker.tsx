@@ -5,7 +5,12 @@ import {
   ChevronRight,
 } from "react-feather";
 import { Manager, Reference, Popper } from "react-popper";
-import { DatepickerCtx, useDatepickerCtx } from "./DatepickerContext";
+import {
+  DatepickerCtx,
+  useDatepickerCtx,
+  DatepickerConfig,
+  daysInMonth,
+} from "./DatepickerContext";
 
 const daysOfWeekNames = [
   "Sunday",
@@ -38,20 +43,23 @@ export const inputStyle = {
 };
 
 interface DatePickerProps {
-  date: Date;
+  config: DatepickerConfig;
   onChange: (date: Date) => void;
 }
 
 export const DatePicker: React.FC<DatePickerProps> = (props) => (
-  <RawDatePicker date={props.date} onChange={props.onChange}></RawDatePicker>
+  <RawDatePicker
+    config={props.config}
+    onChange={props.onChange}
+  ></RawDatePicker>
 );
 
 export const RawDatePicker: React.FC<{
-  date: Date;
+  config: DatepickerConfig;
   onChange: (date: Date) => void;
-}> = ({ date, onChange }) => {
+}> = ({ config, onChange }) => {
   const popupNode = useRef<HTMLElement>();
-  const ctxValue = useDatepickerCtx(date, onChange, popupNode);
+  const ctxValue = useDatepickerCtx(config, onChange, popupNode);
 
   return (
     <DatepickerCtx.Provider value={ctxValue}>
@@ -64,7 +72,7 @@ export const RawDatePicker: React.FC<{
                 type="text"
                 style={inputStyle}
                 onFocus={(e) => ctxValue.showCalendar()}
-                value={formattedDate(date)}
+                value={formattedDate(config.date)}
                 readOnly
               />
               <button
@@ -144,9 +152,9 @@ const DateSelection: React.FC<{}> = (props) => {
     viewYears,
     selectDate,
     visible: { month, year },
-    isSelectedDate,
+    isSelected,
+    isValid,
   } = useContext(DatepickerCtx);
-
   const dates = [];
 
   for (let i = 0; i < beginningDayOfWeek(month, year); i++) {
@@ -154,18 +162,30 @@ const DateSelection: React.FC<{}> = (props) => {
   }
 
   for (let i = 1; i <= daysInMonth(month, year); i++) {
-    dates.push(
-      <button
-        key={`day${i}`}
-        className={`hover:bg-gray-200 rounded p-1 text-sm ${
-          isSelectedDate(i) ? "bg-gray-300 font-semibold" : ""
-        }`}
-        onClick={() => selectDate(i)}
-        style={{ textAlign: "center" }}
-      >
-        {i}
-      </button>
-    );
+    if (isValid({ day: i, month, year })) {
+      dates.push(
+        <button
+          key={`day${i}`}
+          className={`hover:bg-gray-200 rounded p-1 text-sm ${
+            isSelected(i) ? "bg-blue-400 hover:text-gray-800 text-white font-semibold" : ""
+          }`}
+          onClick={() => selectDate(i)}
+          style={{ textAlign: "center" }}
+        >
+          {i}
+        </button>
+      );
+    } else {
+      dates.push(
+        <button
+          key={`day${i}`}
+          className={`hover:bg-gray-200 rounded p-1 text-sm text-gray-300 `}
+          style={{ textAlign: "center" }}
+        >
+          {i}
+        </button>
+      );
+    }
   }
 
   return (
@@ -222,9 +242,15 @@ const DateSelection: React.FC<{}> = (props) => {
  * @param props
  */
 const MonthSelection: React.FC<{}> = (props) => {
-  const { viewYears, selectMonth, nextYear, prevYear, visible } = useContext(
-    DatepickerCtx
-  );
+  const {
+    viewYears,
+    selectMonth,
+    nextYear,
+    prevYear,
+    visible,
+    isValid,
+    isSelected
+  } = useContext(DatepickerCtx);
 
   return (
     <div
@@ -236,19 +262,31 @@ const MonthSelection: React.FC<{}> = (props) => {
         alignItems: "stretch",
       }}
     >
-      <div className="flex" style={{ gridColumn: "1/5" }}>
+      <div className="flex border-b" style={{ gridColumn: "1/5" }}>
         <CalButton chevron="left" onClick={(e) => prevYear()} />
-        <CalButton className="flex-grow" onClick={(e) => viewYears()}>
+        <CalButton
+          className="flex-grow font-semibold"
+          onClick={(e) => viewYears()}
+        >
           {visible.year}
         </CalButton>
         <CalButton chevron="right" onClick={(e) => nextYear()} />
       </div>
-
-      {monthNames.map((month, index) => (
-        <CalButton onClick={(e) => selectMonth(index)}>
-          {month.substring(0, 3)}
-        </CalButton>
-      ))}
+      {monthNames.map((month, index) => {
+        if (isValid({ month: index, year: visible.year })) {
+          return (
+            <CalButton className={isSelected(index) ? "bg-blue-400 hover:text-gray-800 text-white font-semibold" : ""} onClick={(e) => selectMonth(index)}>
+              {month.substring(0, 3)}
+            </CalButton>
+          );
+        } else {
+          return (
+            <CalButton className="text-gray-300">
+              {month.substring(0, 3)}
+            </CalButton>
+          );
+        }
+      })}
     </div>
   );
 };
@@ -262,6 +300,8 @@ const YearSelection: React.FC<{}> = (props) => {
     selectYear,
     prevDecade,
     nextDecade,
+    isSelected,
+    isValid,
     visible: { year },
   } = useContext(DatepickerCtx);
 
@@ -269,8 +309,13 @@ const YearSelection: React.FC<{}> = (props) => {
   let [minYear, maxYear] = [year - 6, year + 6];
 
   for (let i = minYear; i < maxYear; i++) {
-    years.push(<CalButton onClick={(e) => selectYear(i)}>{i}</CalButton>);
-  }
+    if(isValid({year: i})) {
+      years.push(<CalButton className={isSelected(i) ? "bg-blue-400 hover:text-gray-800 text-white font-semibold" : ""} onClick={(e) => selectYear(i)}>{i}</CalButton>);
+    } else {
+      years.push(<CalButton className="text-gray-300">{i}</CalButton>);
+    
+    }
+   }
 
   return (
     <div
@@ -282,9 +327,9 @@ const YearSelection: React.FC<{}> = (props) => {
         alignItems: "stretch",
       }}
     >
-      <div className="flex" style={{ gridColumn: "1/5" }}>
+      <div className="flex border-b" style={{ gridColumn: "1/5" }}>
         <CalButton chevron="left" onClick={(e) => prevDecade()} />
-        <CalButton className="flex-grow">
+        <CalButton className="flex-grow font-medium">
           {`${minYear} - ${maxYear - 1}`}
         </CalButton>
         <CalButton chevron="right" onClick={(e) => nextDecade()} />
@@ -296,7 +341,7 @@ const YearSelection: React.FC<{}> = (props) => {
 };
 
 const buttonClassName =
-  "hover:bg-gray-200 rounded p-1 text-sm flex align-center justify-center focus:outline-none";
+  "hover:bg-gray-200 rounded p-1 text-sm flex align-center items-center justify-center focus:outline-none";
 
 const CalButton: React.FC<{
   chevron?: "right" | "left";
@@ -342,32 +387,4 @@ function formattedDate(date: Date): string {
  */
 function beginningDayOfWeek(m: number, y: number): number {
   return new Date(y, m, 1).getDay();
-}
-
-/**
- * Days in month
- */
-function daysInMonth(month: number, year: number) {
-  switch (month) {
-    case 0:
-    case 2:
-    case 4:
-    case 6:
-    case 7:
-    case 9:
-    case 11:
-      return 31;
-    case 1:
-      return isLeapYear(year) ? 29 : 28;
-    default:
-      return 30;
-  }
-}
-
-/**
- * Is Leap Year
- * @param year
- */
-function isLeapYear(year: number): boolean {
-  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }

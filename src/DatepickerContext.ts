@@ -2,8 +2,18 @@ import { createContext, useEffect, useState } from "react";
 
 type ViewState = "date" | "month" | "year";
 
+export interface DatepickerConfig {
+  date: Date,
+  minDate?: Date,
+  maxDate?: Date
+}
 interface MonthYear {
   month: number;
+  year: number;
+}
+interface DateValidator {
+  day?: number;
+  month?: number;
   year: number;
 }
 
@@ -25,7 +35,8 @@ interface DatepickerContextType {
   isVisible: boolean;
   showCalendar: () => void;
   toggleCalendar: () => void;
-  isSelectedDate: (d: number) => boolean;
+  isSelected: (d: number) => boolean;
+  isValid: (d: DateValidator) => boolean;
 }
 
 export const DatepickerCtx = createContext<DatepickerContextType>({
@@ -35,28 +46,30 @@ export const DatepickerCtx = createContext<DatepickerContextType>({
     year: 1970,
   },
   view: "date",
-  nextMonth: () => {},
-  prevMonth: () => {},
-  nextYear: () => {},
-  prevYear: () => {},
-  nextDecade: () => {},
-  prevDecade: () => {},
-  selectMonth: (m) => {},
-  selectYear: (y) => {},
-  selectDate: (d) => {},
-  viewMonths: () => {},
-  viewYears: () => {},
+  nextMonth: () => { },
+  prevMonth: () => { },
+  nextYear: () => { },
+  prevYear: () => { },
+  nextDecade: () => { },
+  prevDecade: () => { },
+  selectMonth: (m) => { },
+  selectYear: (y) => { },
+  selectDate: (d) => { },
+  viewMonths: () => { },
+  viewYears: () => { },
   isVisible: false,
-  showCalendar: () => {},
-  toggleCalendar: () => {},
-  isSelectedDate: (d) => false,
+  showCalendar: () => { },
+  toggleCalendar: () => { },
+  isSelected: (d) => false,
+  isValid: (d) => true
 });
 
 export function useDatepickerCtx(
-  date: Date,
+  config: DatepickerConfig,
   onChange: (d: Date) => void,
   ref: React.MutableRefObject<HTMLElement | undefined>
 ): DatepickerContextType {
+  let { date, minDate, maxDate } = config;
   const [monthYear, setMonthYear] = useState<MonthYear>({
     month: date?.getMonth() ?? new Date().getMonth(),
     year: date?.getFullYear() ?? new Date().getFullYear(),
@@ -71,16 +84,53 @@ export function useDatepickerCtx(
     setVisible(false);
   };
 
-  const isSelectedDate = (d: number): boolean => {
-    if (
-      d === date.getDate() &&
-      monthYear.month === date.getMonth() &&
-      monthYear.year === date.getFullYear()
-    ) {
-      return true;
+  const isSelected = (d: number): boolean => {
+    let dateCheck = d === date.getDate(),
+      monthCheck = monthYear.month === date.getMonth(),
+      yearCheck = monthYear.year === date.getFullYear();
+
+    // Silently pass on some views.
+    if (view != "date") {
+      dateCheck = true;
+      monthCheck = d === date.getMonth();
     }
-    return false;
+    if (view == "year") {
+      monthCheck = true;
+      yearCheck = d === date.getFullYear();
+    }
+    return dateCheck && monthCheck && yearCheck;
   };
+  const isValid = (d: DateValidator) => {
+    if (d.month == undefined) {
+      d.month = 12;
+    }
+    if (!d.day) {
+      d.day = daysInMonth(d.month, d.year)
+    }
+    let _date = new Date();
+    _date.setFullYear(d.year);
+    _date.setMonth(d.month);
+    _date.setDate(d.day);
+    if (view != "date") {
+      _date.setMonth(d.month - 1);
+    }
+    // For year view there will be a special thing to do
+    if (view == "year") {
+      if(minDate && minDate.getFullYear() > d.year) return false;
+      if(maxDate && maxDate.getFullYear() < d.year) return false;
+      return true;
+    } else {
+      _date.setDate(d.day - 1);
+    }
+    // Other views proceed as normal.
+    if (maxDate && _date > maxDate) {
+      return false;
+    }
+    if (minDate && _date < minDate) {
+      return false;
+    }
+    return true;
+  }
 
   const selectMonth = (m: number) => {
     setMonthYear((state) => ({ ...state, month: m }));
@@ -96,6 +146,7 @@ export function useDatepickerCtx(
     function mouseDownListener(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setVisible(false);
+        setView("date");
       }
     }
 
@@ -109,7 +160,7 @@ export function useDatepickerCtx(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVisible]);
-
+  
   return {
     date,
     visible: monthYear,
@@ -142,6 +193,36 @@ export function useDatepickerCtx(
     isVisible,
     showCalendar: () => setVisible(true),
     toggleCalendar: () => setVisible((state) => !state),
-    isSelectedDate,
+    isSelected,
+    isValid
   };
+}
+
+
+/**
+ * Days in month
+ */
+export function daysInMonth(month: number, year: number) {
+  switch (month) {
+    case 0:
+    case 2:
+    case 4:
+    case 6:
+    case 7:
+    case 9:
+    case 11:
+      return 31;
+    case 1:
+      return isLeapYear(year) ? 29 : 28;
+    default:
+      return 30;
+  }
+}
+
+/**
+ * Is Leap Year
+ * @param year
+ */
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
